@@ -1,7 +1,16 @@
-import { Injectable, Logger, OnModuleInit, Inject, forwardRef } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  OnModuleInit,
+  Inject,
+  forwardRef,
+} from '@nestjs/common';
 import * as path from 'node:path';
 import { JobRecord } from '../../common/interfaces/job.interface.js';
-import { ProcessingError, ProcessingHistoryItem } from '../../common/interfaces/processing.interface.js';
+import {
+  ProcessingError,
+  ProcessingHistoryItem,
+} from '../../common/interfaces/processing.interface.js';
 import { WatcherEventPayload } from '../../common/interfaces/folder.interface.js';
 import { FileHasherUtil } from '../../common/utils/file-hasher.util.js';
 import { FolderWatcherService } from '../folders/folder-watcher.service.js';
@@ -12,6 +21,7 @@ import { NotificationsService } from '../notifications/notifications.service.js'
 import { CsvNormalizerService } from './csv-normalizer.service.js';
 import { CsvParserService } from './csv-parser.service.js';
 import { CsvValidationService } from './csv-validation.service.js';
+import { ConfigService } from '@nestjs/config';
 
 export type JobNotificationDispatcher = (jobs: {
   newJobs: JobRecord[];
@@ -28,6 +38,7 @@ export class CsvProcessingService implements OnModuleInit {
 
   constructor(
     private readonly parser: CsvParserService,
+    private readonly configService: ConfigService,
     private readonly normalizer: CsvNormalizerService,
     private readonly validator: CsvValidationService,
     private readonly jobsService: JobsService,
@@ -45,13 +56,18 @@ export class CsvProcessingService implements OnModuleInit {
       [],
     );
     this.watcher.onFileEvent(async (payload) => {
-      if ((payload.eventType === 'add' || payload.eventType === 'change') && payload.filePath) {
+      if (
+        (payload.eventType === 'add' || payload.eventType === 'change') &&
+        payload.filePath
+      ) {
         await this.processCsvFile(payload);
       }
     });
   }
 
-  public setNotificationDispatcher(dispatcher: JobNotificationDispatcher): void {
+  public setNotificationDispatcher(
+    dispatcher: JobNotificationDispatcher,
+  ): void {
     this.notificationDispatcher = dispatcher;
   }
 
@@ -63,11 +79,15 @@ export class CsvProcessingService implements OnModuleInit {
     return this.history.find((h) => h.id === id);
   }
 
-  public async processCsvFile(event: WatcherEventPayload): Promise<ProcessingHistoryItem | null> {
+  public async processCsvFile(
+    event: WatcherEventPayload,
+  ): Promise<ProcessingHistoryItem | null> {
     const filePath = event.filePath!;
     const fileName = path.basename(filePath);
     const startTime = Date.now();
-    this.logger.log(`Beginning CSV processing for file: ${fileName} (${filePath})`);
+    this.logger.log(
+      `Beginning CSV processing for file: ${fileName} (${filePath})`,
+    );
 
     let fileHash = '';
     try {
@@ -79,14 +99,21 @@ export class CsvProcessingService implements OnModuleInit {
     }
 
     const alreadyProcessed = this.history.find(
-      (h) => h.filePath === filePath && h.fileHash === fileHash && h.status === 'success',
+      (h) =>
+        h.filePath === filePath &&
+        h.fileHash === fileHash &&
+        h.status === 'success',
     );
     if (alreadyProcessed) {
-      this.logger.log(`Skipping unchanged file version: ${fileName} (hash: ${fileHash})`);
+      this.logger.log(
+        `Skipping unchanged file version: ${fileName} (hash: ${fileHash})`,
+      );
       return alreadyProcessed;
     }
 
-    const folderConfig = await this.foldersService.findById(event.folderId).catch(() => null);
+    const folderConfig = await this.foldersService
+      .findById(event.folderId)
+      .catch(() => null);
     const folderName = folderConfig ? folderConfig.name : 'Unknown Folder';
 
     let rawRows;
@@ -118,7 +145,11 @@ export class CsvProcessingService implements OnModuleInit {
         folderId: event.folderId,
         fileName,
       });
-      const validation = this.validator.validateRow(normalized, row.lineNumber, row.data);
+      const validation = this.validator.validateRow(
+        normalized,
+        row.lineNumber,
+        row.data,
+      );
       if (validation.isValid && validation.record) {
         validJobs.push(validation.record);
       } else {
@@ -129,7 +160,12 @@ export class CsvProcessingService implements OnModuleInit {
     await this.jobsService.upsertJobs(validJobs);
     await this.foldersService.updateLastEventTime(event.folderId);
 
-    const status = errors.length === 0 ? 'success' : validJobs.length > 0 ? 'partial' : 'failed';
+    const status =
+      errors.length === 0
+        ? 'success'
+        : validJobs.length > 0
+          ? 'partial'
+          : 'failed';
     const historyItem = this.createHistoryItem({
       event,
       folderName,
@@ -147,11 +183,20 @@ export class CsvProcessingService implements OnModuleInit {
 
     if (this.notificationsService) {
       await this.notificationsService
-        .handleFileProcessed(historyItem, validJobs, 'devsanjaikumarv@gmail.com')
-        .catch((err) => this.logger.error(`Notification dispatch failed: ${err.message}`));
+        .handleFileProcessed(
+          historyItem,
+          validJobs,
+          this.configService.get('SMTP_FROM'),
+        )
+        .catch((err) =>
+          this.logger.error(`Notification dispatch failed: ${err.message}`),
+        );
     } else if (this.notificationDispatcher) {
       try {
-        await this.notificationDispatcher({ newJobs: validJobs, updatedJobs: [] });
+        await this.notificationDispatcher({
+          newJobs: validJobs,
+          updatedJobs: [],
+        });
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : String(err);
         this.logger.error(`Notification dispatch failed: ${msg}`);
@@ -196,6 +241,10 @@ export class CsvProcessingService implements OnModuleInit {
     if (this.history.length > 500) {
       this.history = this.history.slice(-500);
     }
-    await this.storage.write(this.storageCategory, this.storageFile, this.history);
+    await this.storage.write(
+      this.storageCategory,
+      this.storageFile,
+      this.history,
+    );
   }
 }
