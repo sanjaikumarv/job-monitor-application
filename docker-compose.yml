@@ -1,0 +1,46 @@
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: job-monitor-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    restart: unless-stopped
+
+  job-api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    container_name: job-monitor-api
+    ports:
+      - "3001:3001"
+    environment:
+      - PORT=3001
+      - NODE_ENV=production
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - NOTIFICATION_EMAIL=admin@example.com
+    volumes:
+      - ./storage:/app/storage
+      - ./monitored-folders:/monitored-folders
+    depends_on:
+      - redis
+    restart: unless-stopped
+
+  job-ui:
+    build:
+      context: .
+      dockerfile: Dockerfile.ui
+    container_name: job-monitor-ui
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:3001/api
+    depends_on:
+      - job-api
+    restart: unless-stopped
+
+volumes:
+  redis-data:
+
