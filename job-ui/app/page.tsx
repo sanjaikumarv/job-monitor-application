@@ -61,9 +61,9 @@ function DashboardContent() {
 
       {/* Toast Alert */}
       {toast && (
-        <div className="fixed bottom-6 right-6 z-50 animate-bounce">
+        <div className="fixed bottom-4 inset-x-4 sm:inset-x-auto sm:right-6 sm:bottom-6 z-50">
           <div
-            className={`px-4 py-3 rounded-xl shadow-lg text-sm font-semibold text-white ${
+            className={`px-4 py-3 rounded-xl shadow-lg text-sm font-semibold text-white max-w-sm sm:max-w-md mx-auto ${
               toast.type === 'error' ? 'bg-rose-600' : 'bg-emerald-600'
             }`}
           >
@@ -72,7 +72,7 @@ function DashboardContent() {
         </div>
       )}
 
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <main className="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-8">
         {activeTab === 'overview' && (
           <OverviewStats
             folders={folders}

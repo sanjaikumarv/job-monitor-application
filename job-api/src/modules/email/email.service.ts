@@ -72,7 +72,7 @@ export class EmailService {
       const from =
         this.config.get<string>('SMTP_FROM') || 'noreply@jobmonitor.local';
       const info = await this.transporter.sendMail({
-        from: `"Job Notification Alert" <${from}>`,
+        from: `Job Alert <${from}>`,
         to: recipient,
         subject,
         text,

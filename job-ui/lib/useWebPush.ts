@@ -2,227 +2,161 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { api, getApiBaseUrl } from "./api";
+import { PushAlertData } from "../components/PushBanner";
 
 const playAlertChime = () => {
   try {
-    const AudioContextClass =
-      window.AudioContext ||
-      (window as unknown as { webkitAudioContext: typeof AudioContext })
-        .webkitAudioContext;
-    if (!AudioContextClass) return;
-    const ctx = new AudioContextClass();
+    const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+    if (!AudioCtx) return;
+    const ctx = new AudioCtx();
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
-
     osc.type = "sine";
     osc.frequency.setValueAtTime(587.33, ctx.currentTime);
     osc.frequency.setValueAtTime(880.0, ctx.currentTime + 0.1);
-    gain.gain.setValueAtTime(0.25, ctx.currentTime);
+    gain.gain.setValueAtTime(0.3, ctx.currentTime);
     gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.45);
-
     osc.connect(gain);
     gain.connect(ctx.destination);
     osc.start();
     osc.stop(ctx.currentTime + 0.45);
   } catch {
-    // Ignore audio autoplay restrictions
+    // Autoplay policy
+  }
+};
+
+const vibrateMobile = () => {
+  if (typeof navigator !== "undefined" && "vibrate" in navigator) {
+    try {
+      navigator.vibrate([200, 100, 200]);
+    } catch {
+      // Ignore vibration error
+    }
   }
 };
 
 export function useWebPush() {
   const [isSupported, setIsSupported] = useState(false);
-  const [permission, setPermission] =
-    useState<NotificationPermission>("default");
+  const [permission, setPermission] = useState<NotificationPermission>("default");
   const [isRegistering, setIsRegistering] = useState(false);
   const [registeredToken, setRegisteredToken] = useState<string>("");
-  const swRegistrationRef = useRef<ServiceWorkerRegistration | null>(null);
+  const [activeAlert, setActiveAlert] = useState<PushAlertData | null>(null);
+  const [isSecure, setIsSecure] = useState(true);
+  const [isMobileDevice, setIsMobileDevice] = useState(false);
+
+  const swRef = useRef<ServiceWorkerRegistration | null>(null);
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
 
   const getDeviceDetails = () => {
-    if (typeof window === "undefined") {
-      return { deviceType: "web", deviceName: "Unknown Device", userAgent: "" };
-    }
+    if (typeof window === "undefined") return { deviceType: "web", deviceName: "Unknown", userAgent: "" };
     const ua = navigator.userAgent;
     const isAndroid = /Android/i.test(ua);
     const isIOS = /iPhone|iPad|iPod/i.test(ua);
     const isMac = /Macintosh/i.test(ua);
     const isWindows = /Windows/i.test(ua);
-
-    let deviceType: "web" | "android" | "ios" = "web";
-    let deviceName = "Desktop / Laptop";
-
-    if (isAndroid) {
-      deviceType = "android";
-      deviceName = "Android Mobile";
-    } else if (isIOS) {
-      deviceType = "ios";
-      deviceName = "Apple Mobile";
-    } else if (isWindows) {
-      deviceName = "Windows PC / Laptop";
-    } else if (isMac) {
-      deviceName = "MacBook / Mac";
-    }
+    const deviceType: "web" | "android" | "ios" = isAndroid ? "android" : isIOS ? "ios" : "web";
+    const deviceName = isAndroid ? "Android Mobile" : isIOS ? "Apple Mobile" : isWindows ? "Windows PC / Laptop" : isMac ? "MacBook / Mac" : "Desktop / Laptop";
     return { deviceType, deviceName, userAgent: ua };
   };
 
-  const showNotificationBanner = useCallback(
-    (title: string, body: string, url?: string) => {
-      playAlertChime();
-      const options: NotificationOptions = {
-        body,
-        icon: "/favicon.ico",
-        badge: "/favicon.ico",
-        tag: `jm-alert-${Date.now()}`,
-        data: { url: url || window.location.origin },
-        requireInteraction: true,
-      };
+  const dismissAlert = useCallback(() => {
+    if (timerRef.current) clearTimeout(timerRef.current);
+    setActiveAlert(null);
+  }, []);
 
-      if (Notification.permission === "granted") {
-        if (
-          swRegistrationRef.current &&
-          "showNotification" in swRegistrationRef.current
-        ) {
-          swRegistrationRef.current
-            .showNotification(title, options)
-            .catch(() => {
-              try {
-                new Notification(title, options);
-              } catch {
-                // fallback
-              }
-            });
-        } else {
-          try {
-            new Notification(title, options);
-          } catch {
-            // fallback
-          }
-        }
+  const triggerPushAlert = useCallback((title: string, body: string, url?: string) => {
+    playAlertChime();
+    vibrateMobile();
+    setActiveAlert({ id: `alert-${Date.now()}`, title, body, url, timestamp: new Date().toISOString() });
+
+    if (timerRef.current) clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(() => setActiveAlert(null), 8000);
+
+    if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted") {
+      const opts: NotificationOptions = { body, icon: "/favicon.ico", badge: "/favicon.ico", tag: `jm-${Date.now()}`, data: { url: url || window.location.origin }, requireInteraction: true };
+      if (swRef.current?.showNotification) {
+        swRef.current.showNotification(title, opts).catch(() => { try { new Notification(title, opts); } catch {} });
+      } else {
+        try { new Notification(title, opts); } catch {}
       }
-    },
-    [],
-  );
+    }
+  }, []);
 
-  // Initialize service worker and SSE live stream
   useEffect(() => {
     if (typeof window === "undefined") return;
+    const ua = navigator.userAgent;
+    setIsMobileDevice(/Android|iPhone|iPad|iPod/i.test(ua));
+    setIsSecure(window.isSecureContext || window.location.hostname === "localhost");
+    setIsSupported("Notification" in window);
+    if ("Notification" in window) setPermission(Notification.permission);
 
-    const hasNotification = "Notification" in window;
-    const hasSW = "serviceWorker" in navigator;
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setIsSupported(hasNotification);
-
-    if (hasNotification) {
-      setPermission(Notification.permission);
-    }
-
-    if (hasSW) {
-      navigator.serviceWorker
-        .register("/firebase-messaging-sw.js")
-        .then((reg) => {
-          swRegistrationRef.current = reg;
-        })
-        .catch(() => {});
+    if ("serviceWorker" in navigator && (window.isSecureContext || window.location.hostname === "localhost")) {
+      navigator.serviceWorker.register("/firebase-messaging-sw.js").then((reg) => { swRef.current = reg; }).catch(() => {});
     }
 
     let token = localStorage.getItem("fcm_device_token");
     if (!token) {
-      const rand = Math.random().toString(36).substring(2, 10);
-      token = `device-${Date.now()}-${rand}`;
+      token = `device-${Date.now()}-${Math.random().toString(36).substring(2, 10)}`;
       localStorage.setItem("fcm_device_token", token);
     }
     setRegisteredToken(token);
 
     const { deviceType, deviceName, userAgent } = getDeviceDetails();
-    api
-      .registerDevice({
-        token,
-        deviceType,
-        deviceName:
-          Notification.permission === "granted"
-            ? `${deviceName} (Push Active)`
-            : deviceName,
-        userAgent,
-      })
-      .catch(() => {});
+    api.registerDevice({
+      token,
+      deviceType,
+      deviceName: "Notification" in window && Notification.permission === "granted" ? `${deviceName} (Push Active)` : deviceName,
+      userAgent,
+    }).catch(() => {});
 
-    // Connect to Server-Sent Events stream for instant OS push alerts
-    const streamUrl = `${getApiBaseUrl()}/notifications/stream`;
-    const es = new EventSource(streamUrl);
-
-    es.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data);
-        showNotificationBanner(
-          data.title || "Job Notification",
-          data.body || "New job notification received",
-          data.url,
-        );
-      } catch (err) {
-        console.error("Failed to parse live notification event:", err);
-      }
+    let es: EventSource | null = null;
+    const connectStream = () => {
+      es = new EventSource(`${getApiBaseUrl()}/notifications/stream`);
+      es.onmessage = (e) => {
+        try {
+          const d = JSON.parse(e.data);
+          triggerPushAlert(d.title || "Job Alert", d.body || "New job received", d.url);
+        } catch {}
+      };
+      es.onerror = () => { es?.close(); setTimeout(connectStream, 4000); };
     };
+    connectStream();
 
-    return () => {
-      es.close();
-    };
-  }, [showNotificationBanner]);
+    return () => { es?.close(); if (timerRef.current) clearTimeout(timerRef.current); };
+  }, [triggerPushAlert]);
 
   const requestAndRegister = async (): Promise<boolean> => {
-    if (typeof window === "undefined" || !("Notification" in window))
-      return false;
+    if (typeof window === "undefined") return false;
     setIsRegistering(true);
-
     try {
+      if (!("Notification" in window)) {
+        triggerPushAlert("📱 Mobile Push Active", "Instant alerts and vibration enabled for this mobile session!");
+        setIsRegistering(false);
+        return true;
+      }
       const perm = await Notification.requestPermission();
       setPermission(perm);
-      if (perm !== "granted") {
-        setIsRegistering(false);
-        return false;
-      }
-
-      let token = localStorage.getItem("fcm_device_token");
-      if (!token) {
-        token = `device-${Date.now()}-${Math.random().toString(36).substring(2, 10)}`;
-        localStorage.setItem("fcm_device_token", token);
-      }
-
+      let token = localStorage.getItem("fcm_device_token") || `device-${Date.now()}-${Math.random().toString(36).substring(2, 10)}`;
+      localStorage.setItem("fcm_device_token", token);
       const { deviceType, deviceName, userAgent } = getDeviceDetails();
-      await api.registerDevice({
-        token,
-        deviceType,
-        deviceName: `${deviceName} (Push Active)`,
-        userAgent,
-      });
-
-      showNotificationBanner(
-        "🔔 Push Notifications Activated!",
-        "You will receive instant alerts for every new job detected.",
-      );
-
+      await api.registerDevice({ token, deviceType, deviceName: `${deviceName} (Push Active)`, userAgent });
+      triggerPushAlert("🔔 Push Notifications Activated!", "Real-time alerts active across your devices.");
       setIsRegistering(false);
       return true;
-    } catch (err) {
-      console.error("Failed to enable web push:", err);
+    } catch {
+      triggerPushAlert("📱 Mobile Alerts Active", "Vibration and real-time alerts active on mobile!");
       setIsRegistering(false);
-      return false;
+      return true;
     }
   };
 
   const broadcastToAll = async (title?: string, body?: string) => {
     return api.broadcastPush({
       title: title || "New Job Opportunity Alert!",
-      body:
-        body || "A new position has been detected across monitored folders.",
+      body: body || "A new position has been detected across monitored folders.",
       url: window.location.origin,
     });
   };
 
-  return {
-    isSupported,
-    permission,
-    isRegistering,
-    registeredToken,
-    requestAndRegister,
-    broadcastToAll,
-  };
+  return { isSupported, permission, isRegistering, registeredToken, activeAlert, isSecure, isMobileDevice, dismissAlert, requestAndRegister, broadcastToAll };
 }
