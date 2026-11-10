@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import { api } from '../lib/api';
 import { NotificationTask } from '../lib/types';
 
@@ -15,6 +15,9 @@ export default function NotificationsTab({
   refetch,
   showToast,
 }: NotificationsTabProps) {
+  const [isSendingEmail, setIsSendingEmail] = useState(false);
+  const [isSendingPush, setIsSendingPush] = useState(false);
+
   const handleRetry = async (id: string) => {
     try {
       await api.retryNotification(id);
@@ -25,14 +28,63 @@ export default function NotificationsTab({
     }
   };
 
+  const handleTestEmail = async () => {
+    setIsSendingEmail(true);
+    try {
+      const res = await api.testEmail();
+      showToast(res.message || 'Test email dispatched successfully!');
+      refetch();
+    } catch {
+      showToast('Failed to dispatch test email', 'error');
+    } finally {
+      setIsSendingEmail(false);
+    }
+  };
+
+  const handleTestPush = async () => {
+    setIsSendingPush(true);
+    try {
+      const res = await api.testPush();
+      showToast(res.message || 'Test push notification dispatched!');
+      refetch();
+    } catch {
+      showToast('Failed to dispatch test push', 'error');
+    } finally {
+      setIsSendingPush(false);
+    }
+  };
+
   return (
     <div className="bg-white rounded-xl border border-gray-200 shadow-xs overflow-hidden">
-      <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
+      <div className="px-6 py-4 border-b border-gray-200 flex flex-wrap gap-3 justify-between items-center">
         <div>
           <h3 className="font-bold text-gray-900">Notification Dispatch History</h3>
           <p className="text-xs text-gray-500">Real-time status of Nodemailer emails and FCM Push notifications</p>
         </div>
-        <button onClick={refetch} className="text-xs font-semibold text-blue-600 hover:text-blue-800">Refresh</button>
+        <div className="flex items-center space-x-2">
+          <button
+            onClick={handleTestEmail}
+            disabled={isSendingEmail}
+            className="px-3 py-1.5 bg-purple-50 hover:bg-purple-100 text-purple-700 text-xs font-semibold rounded-lg border border-purple-200 transition disabled:opacity-50 cursor-pointer"
+            title="Dispatch a test email notification"
+          >
+            {isSendingEmail ? 'Sending...' : '✉️ Send Test Email'}
+          </button>
+          <button
+            onClick={handleTestPush}
+            disabled={isSendingPush}
+            className="px-3 py-1.5 bg-sky-50 hover:bg-sky-100 text-sky-700 text-xs font-semibold rounded-lg border border-sky-200 transition disabled:opacity-50 cursor-pointer"
+            title="Dispatch a test push notification to registered devices"
+          >
+            {isSendingPush ? 'Sending...' : '🔔 Send Test Push'}
+          </button>
+          <button
+            onClick={refetch}
+            className="px-3 py-1.5 bg-gray-50 hover:bg-gray-100 text-gray-700 text-xs font-semibold rounded-lg border border-gray-200 transition cursor-pointer"
+          >
+            Refresh ↻
+          </button>
+        </div>
       </div>
 
       {notifications.length === 0 ? (
@@ -98,7 +150,7 @@ export default function NotificationsTab({
                     {(task.status === 'failed' || task.status === 'partially_sent') && (
                       <button
                         onClick={() => handleRetry(task.id)}
-                        className="text-xs font-semibold px-2.5 py-1 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded transition"
+                        className="text-xs font-semibold px-2.5 py-1 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded transition cursor-pointer"
                       >
                         Retry ↻
                       </button>
@@ -113,4 +165,3 @@ export default function NotificationsTab({
     </div>
   );
 }
-

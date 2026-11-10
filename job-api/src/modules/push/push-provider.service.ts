@@ -45,12 +45,10 @@ export class PushProvider implements NotificationProvider {
     }
 
     const recipient = input.recipient.trim();
-    if (
-      recipient.startsWith('mock-') ||
-      recipient.startsWith('web-fcm-') ||
-      recipient.includes('mock') ||
-      recipient === 'test-device-token'
-    ) {
+    if (!this.isFcmToken(recipient)) {
+      this.logger.log(
+        `Recipient "${recipient.slice(0, 18)}..." is a local device token. Delivering via simulated provider.`,
+      );
       return this.sendMock(input);
     }
 
@@ -108,7 +106,12 @@ export class PushProvider implements NotificationProvider {
 
       this.logger.error(`FCM error for ${recipient}: [${errorCode}] ${errorMessage}`);
 
-      if (errorCode === 'UNREGISTERED' || errorCode === 'INVALID_ARGUMENT') {
+      if (errorCode === 'INVALID_ARGUMENT') {
+        this.logger.warn(`Invalid FCM token for ${recipient}. Falling back to mock delivery.`);
+        return this.sendMock(input);
+      }
+
+      if (errorCode === 'UNREGISTERED') {
         throw new Error(`FCM permanent failure: Token is invalid or expired [${errorCode}]. ${errorMessage}`);
       }
 
@@ -180,6 +183,24 @@ export class PushProvider implements NotificationProvider {
     };
 
     return this.cachedToken.token;
+  }
+
+  private isFcmToken(token: string): boolean {
+    if (!token || typeof token !== 'string') return false;
+    const t = token.trim();
+    if (
+      t.startsWith('device-') ||
+      t.startsWith('mock-') ||
+      t.startsWith('web-fcm-') ||
+      t.startsWith('test-') ||
+      t.startsWith('client-') ||
+      t.includes('mock') ||
+      t === 'test-device-token' ||
+      t.length < 60
+    ) {
+      return false;
+    }
+    return true;
   }
 }
 

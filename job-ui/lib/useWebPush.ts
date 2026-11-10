@@ -1,17 +1,19 @@
-'use client';
+"use client";
 
-import { useState, useEffect } from 'react';
-import { api } from './api';
+import { useState, useEffect } from "react";
+import { api } from "./api";
 
 export function useWebPush() {
   const [isSupported, setIsSupported] = useState(false);
-  const [permission, setPermission] = useState<NotificationPermission>('default');
+  const [permission, setPermission] =
+    useState<NotificationPermission>("default");
   const [isRegistering, setIsRegistering] = useState(false);
-  const [registeredToken, setRegisteredToken] = useState<string>('');
+  const [registeredToken, setRegisteredToken] = useState<string>("");
 
   const getDeviceDetails = () => {
-    if (typeof window === 'undefined') {
-      return { deviceType: 'web', deviceName: 'Unknown Device', userAgent: '' };
+    console.log("window---->", window);
+    if (typeof window === "undefined") {
+      return { deviceType: "web", deviceName: "Unknown Device", userAgent: "" };
     }
 
     const ua = navigator.userAgent;
@@ -20,19 +22,19 @@ export function useWebPush() {
     const isMac = /Macintosh/i.test(ua);
     const isWindows = /Windows/i.test(ua);
 
-    let deviceType: 'web' | 'android' | 'ios' = 'web';
-    let deviceName = 'Desktop / Laptop';
+    let deviceType: "web" | "android" | "ios" = "web";
+    let deviceName = "Desktop / Laptop";
 
     if (isAndroid) {
-      deviceType = 'android';
-      deviceName = 'Android Mobile';
+      deviceType = "android";
+      deviceName = "Android Mobile";
     } else if (isIOS) {
-      deviceType = 'ios';
-      deviceName = 'Apple Mobile';
+      deviceType = "ios";
+      deviceName = "Apple Mobile";
     } else if (isWindows) {
-      deviceName = 'Windows PC / Laptop';
+      deviceName = "Windows PC / Laptop";
     } else if (isMac) {
-      deviceName = 'MacBook / Mac';
+      deviceName = "MacBook / Mac";
     }
 
     return { deviceType, deviceName, userAgent: ua };
@@ -40,10 +42,10 @@ export function useWebPush() {
 
   // Automatically register device detail on initial open
   useEffect(() => {
-    if (typeof window === 'undefined') return;
+    if (typeof window === "undefined") return;
 
-    const hasNotification = 'Notification' in window;
-    const hasSW = 'serviceWorker' in navigator;
+    const hasNotification = "Notification" in window;
+    const hasSW = "serviceWorker" in navigator;
     setIsSupported(hasNotification && hasSW);
 
     if (hasNotification) {
@@ -52,11 +54,11 @@ export function useWebPush() {
 
     const autoCaptureDevice = async () => {
       try {
-        let token = localStorage.getItem('fcm_device_token');
+        let token = localStorage.getItem("fcm_device_token");
         if (!token) {
           const rand = Math.random().toString(36).substring(2, 10);
           token = `device-${Date.now()}-${rand}`;
-          localStorage.setItem('fcm_device_token', token);
+          localStorage.setItem("fcm_device_token", token);
         }
         setRegisteredToken(token);
 
@@ -71,10 +73,12 @@ export function useWebPush() {
 
         // Register service worker if available
         if (hasSW) {
-          navigator.serviceWorker.register('/firebase-messaging-sw.js').catch(() => {});
+          navigator.serviceWorker
+            .register("/firebase-messaging-sw.js")
+            .catch(() => {});
         }
       } catch (err) {
-        console.error('Initial device capture failed:', err);
+        console.error("Initial device capture failed:", err);
       }
     };
 
@@ -88,15 +92,15 @@ export function useWebPush() {
     try {
       const perm = await Notification.requestPermission();
       setPermission(perm);
-      if (perm !== 'granted') {
+      if (perm !== "granted") {
         setIsRegistering(false);
         return false;
       }
 
-      let token = localStorage.getItem('fcm_device_token');
+      let token = localStorage.getItem("fcm_device_token");
       if (!token) {
         token = `device-${Date.now()}-${Math.random().toString(36).substring(2, 10)}`;
-        localStorage.setItem('fcm_device_token', token);
+        localStorage.setItem("fcm_device_token", token);
       }
 
       const { deviceType, deviceName, userAgent } = getDeviceDetails();
@@ -110,7 +114,7 @@ export function useWebPush() {
       setIsRegistering(false);
       return true;
     } catch (err) {
-      console.error('Failed to enable web push:', err);
+      console.error("Failed to enable web push:", err);
       setIsRegistering(false);
       return false;
     }
@@ -118,8 +122,9 @@ export function useWebPush() {
 
   const broadcastToAll = async (title?: string, body?: string) => {
     return api.broadcastPush({
-      title: title || 'New Job Opportunity Alert!',
-      body: body || 'A new position has been detected across monitored folders.',
+      title: title || "New Job Opportunity Alert!",
+      body:
+        body || "A new position has been detected across monitored folders.",
       url: window.location.origin,
     });
   };

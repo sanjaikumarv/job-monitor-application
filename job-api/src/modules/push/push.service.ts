@@ -68,7 +68,7 @@ export class PushService {
         const msg = err instanceof Error ? err.message : String(err);
         this.logger.error(`Push dispatch failed for token ${token}: ${msg}`);
 
-        if (msg.includes('permanent failure') || msg.includes('UNREGISTERED') || msg.includes('INVALID_ARGUMENT')) {
+        if (msg.includes('UNREGISTERED') && !token.startsWith('device-')) {
           invalidTokens.push(token);
         }
       }

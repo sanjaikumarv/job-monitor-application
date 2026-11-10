@@ -67,7 +67,9 @@ export class DevicesService implements OnModuleInit {
     }
     if (changed) {
       await this.persist();
-      this.logger.log(`Pruned ${tokens.length} invalid or expired device tokens.`);
+      this.logger.log(
+        `Pruned ${tokens.length} invalid or expired device tokens.`,
+      );
     }
   }
 

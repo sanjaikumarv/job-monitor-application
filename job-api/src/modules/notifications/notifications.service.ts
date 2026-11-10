@@ -1,5 +1,14 @@
-import { Injectable, Logger, OnModuleInit, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  OnModuleInit,
+  NotFoundException,
+  Inject,
+  Optional,
+  forwardRef,
+} from '@nestjs/common';
 import { JobRecord } from '../../common/interfaces/job.interface.js';
+import type { ProcessingHistoryItem } from '../../common/interfaces/processing.interface.js';
 import {
   NotificationChannel,
   NotificationDeliveryStatus,
@@ -9,6 +18,7 @@ import {
 import { QueueService } from '../queues/queue.service.js';
 import { QUEUE_EMAIL, QUEUE_PUSH } from '../queues/queue.constants.js';
 import { JsonStorageService } from '../storage/json-storage.service.js';
+import { EmailService } from '../email/email.service.js';
 
 @Injectable()
 export class NotificationsService implements OnModuleInit {
@@ -20,6 +30,9 @@ export class NotificationsService implements OnModuleInit {
   constructor(
     private readonly storage: JsonStorageService,
     private readonly queue: QueueService,
+    @Optional()
+    @Inject(forwardRef(() => EmailService))
+    private readonly emailService?: EmailService,
   ) {}
 
   public async onModuleInit(): Promise<void> {
@@ -127,6 +140,36 @@ export class NotificationsService implements OnModuleInit {
     });
 
     return task;
+  }
+
+  public async recordTask(task: NotificationTask): Promise<void> {
+    this.tasksMap.set(task.id, task);
+    await this.persist();
+  }
+
+  public async handleFileProcessed(
+    historyItem: ProcessingHistoryItem,
+    newJobs: JobRecord[] = [],
+    updatedJobs: JobRecord[] = [],
+    targetEmail = 'devsanjaikumarv@gmail.com',
+  ): Promise<void> {
+    if (this.emailService) {
+      try {
+        await this.emailService.sendFileProcessedSummary(historyItem, targetEmail);
+        this.logger.log(
+          `Dispatched file processed summary email for "${historyItem.fileName}" to ${targetEmail}`,
+        );
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        this.logger.error(`Failed to send file summary email: ${msg}`);
+      }
+    }
+
+    const jobsToNotify = [...newJobs, ...updatedJobs];
+    for (const job of jobsToNotify) {
+      await this.enqueueNotification(job, 'email', targetEmail);
+      await this.enqueueNotification(job, 'push', 'multicast');
+    }
   }
 
   private async persist(): Promise<void> {

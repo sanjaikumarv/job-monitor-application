@@ -49,15 +49,23 @@ describe('End-to-End Pipeline Integration', () => {
     emailService.sendJobNotification = vi.fn().mockResolvedValue({
       success: true,
       messageId: 'e2e-email-1',
-      recipient: 'admin@example.com',
+      recipient: 'devsanjaikumarv@gmail.com',
     });
     const devicesService = new DevicesService(storage);
     const pushProvider = new PushProvider();
     const pushService = new PushService(pushProvider, devicesService);
 
     notificationsService = new NotificationsService(storage, queueService);
-    new EmailNotificationProcessor(queueService, emailService, notificationsService).onModuleInit();
-    new PushNotificationProcessor(queueService, pushService, notificationsService).onModuleInit();
+    new EmailNotificationProcessor(
+      queueService,
+      emailService,
+      notificationsService,
+    ).onModuleInit();
+    new PushNotificationProcessor(
+      queueService,
+      pushService,
+      notificationsService,
+    ).onModuleInit();
 
     csvProcessingService = new CsvProcessingService(
       new CsvParserService(),
@@ -94,7 +102,10 @@ describe('End-to-End Pipeline Integration', () => {
     expect(folder.id).toBeDefined();
 
     // 2. Drop user's sample CSV into folder
-    const sampleFixture = path.resolve(process.cwd(), 'test/fixtures/sample-jobs.csv');
+    const sampleFixture = path.resolve(
+      process.cwd(),
+      'test/fixtures/sample-jobs.csv',
+    );
     const targetCsvPath = path.join(tempWatchDir, 'jobs_2026-11-10_190006.csv');
     fs.copyFileSync(sampleFixture, targetCsvPath);
 
@@ -129,11 +140,15 @@ describe('End-to-End Pipeline Integration', () => {
     const notifications = notificationsService.findAll();
     expect(notifications.length).toBeGreaterThanOrEqual(2); // 1 email + 1 push
 
-    const emailTask = notifications.find((n) => n.channel === 'email' && n.jobId === job?.jobId);
+    const emailTask = notifications.find(
+      (n) => n.channel === 'email' && n.jobId === job?.jobId,
+    );
     expect(emailTask).toBeDefined();
     expect(emailTask?.status).toBe('sent');
 
-    const pushTask = notifications.find((n) => n.channel === 'push' && n.jobId === job?.jobId);
+    const pushTask = notifications.find(
+      (n) => n.channel === 'push' && n.jobId === job?.jobId,
+    );
     expect(pushTask).toBeDefined();
     expect(pushTask?.status).toBe('sent');
 

@@ -117,5 +117,13 @@ export const api = {
     const { data } = await apiClient.post('/devices/broadcast', payload);
     return data;
   },
+  testEmail: async (payload?: { to?: string; subject?: string; message?: string }) => {
+    const { data } = await apiClient.post('/notifications/test-email', payload || {});
+    return data;
+  },
+  testPush: async (payload?: { token?: string; title?: string; body?: string; url?: string }) => {
+    const { data } = await apiClient.post('/notifications/test-push', payload || {});
+    return data;
+  },
 };
 

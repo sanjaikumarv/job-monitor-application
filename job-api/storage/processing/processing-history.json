@@ -14,5 +14,37 @@
     "durationMs": 26,
     "errors": [],
     "processedAt": "2026-11-10T16:10:22.395Z"
+  },
+  {
+    "id": "proc-mwawxlo6-m31h",
+    "folderId": "folder-mwavywzf-lzbt",
+    "folderName": "job-search-results",
+    "fileName": "jobs_2026-11-10_1900062.csv",
+    "filePath": "C:\\Users\\Sanjaikumar\\Desktop\\ai-job-agent\\job-search-results\\jobs_2026-11-10_1900062.csv",
+    "fileHash": "a9d7e74291e234887009c684d7e89baa94ef479bba684e876a126692608205b1",
+    "eventType": "add",
+    "status": "success",
+    "recordsTotal": 1,
+    "recordsValid": 1,
+    "recordsFailed": 0,
+    "durationMs": 19,
+    "errors": [],
+    "processedAt": "2026-11-10T16:37:02.070Z"
+  },
+  {
+    "id": "proc-mway1kte-qyv9",
+    "folderId": "folder-mwavywzf-lzbt",
+    "folderName": "job-search-results",
+    "fileName": "jobs_2026-11-10_1900062 - Copy.csv",
+    "filePath": "C:\\Users\\Sanjaikumar\\Desktop\\ai-job-agent\\job-search-results\\jobs_2026-11-10_1900062 - Copy.csv",
+    "fileHash": "a9d7e74291e234887009c684d7e89baa94ef479bba684e876a126692608205b1",
+    "eventType": "add",
+    "status": "success",
+    "recordsTotal": 1,
+    "recordsValid": 1,
+    "recordsFailed": 0,
+    "durationMs": 39,
+    "errors": [],
+    "processedAt": "2026-11-10T17:08:07.202Z"
   }
 ]
