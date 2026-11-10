@@ -6,8 +6,12 @@ import { IStorageService, StorageCategory } from './storage.interface.js';
 @Injectable()
 export class JsonStorageService implements IStorageService, OnModuleInit {
   private readonly logger = new Logger(JsonStorageService.name);
-  private readonly baseStorageDir = path.resolve(process.cwd(), 'storage');
+  private baseStorageDir = path.resolve(process.cwd(), 'storage');
   private readonly fileWriteLocks = new Map<string, Promise<void>>();
+
+  public setBaseDirectory(customDir: string): void {
+    this.baseStorageDir = customDir;
+  }
 
   public onModuleInit(): void {
     this.ensureBaseDirectories();

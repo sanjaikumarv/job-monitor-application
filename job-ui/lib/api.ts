@@ -96,8 +96,25 @@ export const api = {
   },
 
   // Devices
-  registerDevice: async (payload: { token: string; deviceType: string }) => {
+  registerDevice: async (payload: {
+    token: string;
+    deviceType?: string;
+    deviceName?: string;
+    userAgent?: string;
+  }) => {
     const { data } = await apiClient.post('/devices/register', payload);
+    return data;
+  },
+  getDevices: async () => {
+    const { data } = await apiClient.get('/devices');
+    return data;
+  },
+  broadcastPush: async (payload: {
+    title?: string;
+    body?: string;
+    url?: string;
+  }): Promise<{ sentCount: number; devicesCount: number }> => {
+    const { data } = await apiClient.post('/devices/broadcast', payload);
     return data;
   },
 };

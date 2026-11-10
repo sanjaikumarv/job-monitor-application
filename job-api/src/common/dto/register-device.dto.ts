@@ -12,6 +12,13 @@ export class RegisterDeviceDto {
 
   @IsOptional()
   @IsString()
+  deviceName?: string;
+
+  @IsOptional()
+  @IsString()
+  userAgent?: string;
+
+  @IsOptional()
+  @IsString()
   userId?: string;
 }
-

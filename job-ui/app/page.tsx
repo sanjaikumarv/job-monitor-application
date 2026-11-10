@@ -57,7 +57,7 @@ function DashboardContent() {
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col text-gray-900">
-      <Navbar activeTab={activeTab} setActiveTab={setActiveTab} />
+      <Navbar activeTab={activeTab} setActiveTab={setActiveTab} showToast={showToast} />
 
       {/* Toast Alert */}
       {toast && (

@@ -1,15 +1,32 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import { useWebPush } from '../lib/useWebPush';
 
 interface NavbarProps {
   activeTab: 'overview' | 'folders' | 'jobs' | 'processing' | 'notifications';
   setActiveTab: (tab: 'overview' | 'folders' | 'jobs' | 'processing' | 'notifications') => void;
+  showToast?: (msg: string, type?: 'success' | 'error') => void;
 }
 
-export default function Navbar({ activeTab, setActiveTab }: NavbarProps) {
-  const { isSupported, permission, isRegistering, requestAndRegister } = useWebPush();
+export default function Navbar({ activeTab, setActiveTab, showToast }: NavbarProps) {
+  const { isSupported, permission, isRegistering, requestAndRegister, broadcastToAll } = useWebPush();
+  const [isBroadcasting, setIsBroadcasting] = useState(false);
+
+  const handleBroadcast = async () => {
+    setIsBroadcasting(true);
+    try {
+      const res = await broadcastToAll(
+        'New Job Opportunity Alert!',
+        'A new verified job opportunity is available on Job Monitor System.',
+      );
+      showToast?.(`📢 Push dispatched to ${res.sentCount || 0} device(s)!`, 'success');
+    } catch {
+      showToast?.('Failed to send broadcast push notification', 'error');
+    } finally {
+      setIsBroadcasting(false);
+    }
+  };
 
   const tabs = [
     { id: 'overview', label: 'Dashboard Overview' },
@@ -34,9 +51,21 @@ export default function Navbar({ activeTab, setActiveTab }: NavbarProps) {
           </div>
 
           <div className="flex items-center space-x-3">
+            {/* Broadcast Push to All Devices */}
+            <button
+              onClick={handleBroadcast}
+              disabled={isBroadcasting}
+              className="text-xs px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold rounded-lg transition border border-blue-200 cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
+              title="Send live push notification to all captured devices"
+            >
+              <span>📢</span>
+              <span>{isBroadcasting ? 'Pushing...' : 'Push to All Devices'}</span>
+            </button>
+
+            {/* Notification Permission Request */}
             {isSupported && (
               permission === 'granted' ? (
-                <span className="text-xs px-2.5 py-1 bg-blue-50 text-blue-700 font-semibold rounded-lg flex items-center gap-1 border border-blue-200">
+                <span className="text-xs px-2.5 py-1 bg-emerald-50 text-emerald-700 font-semibold rounded-lg flex items-center gap-1 border border-emerald-200">
                   🔔 Push Enabled
                 </span>
               ) : (

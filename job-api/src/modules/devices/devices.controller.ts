@@ -1,15 +1,21 @@
-import { Body, Controller, Delete, Get, Param, Post } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Post, Inject, forwardRef } from '@nestjs/common';
 import type { DeviceRegistration } from '../../common/interfaces/device.interface.js';
 import { RegisterDeviceDto } from '../../common/dto/register-device.dto.js';
+import { BroadcastPushDto } from '../../common/dto/broadcast-push.dto.js';
+import { PushProvider } from '../push/push-provider.service.js';
 import { DevicesService } from './devices.service.js';
 
 @Controller('api/devices')
 export class DevicesController {
-  constructor(private readonly devicesService: DevicesService) {}
+  constructor(
+    private readonly devicesService: DevicesService,
+    @Inject(forwardRef(() => PushProvider))
+    private readonly pushProvider: PushProvider,
+  ) {}
 
   @Post('register')
   public async register(@Body() dto: RegisterDeviceDto): Promise<DeviceRegistration> {
-    return this.devicesService.register(dto.token, dto.deviceType, dto.userId);
+    return this.devicesService.register(dto);
   }
 
   @Delete(':token')
@@ -21,5 +27,38 @@ export class DevicesController {
   @Get()
   public getAll(): DeviceRegistration[] {
     return this.devicesService.getAllDevices();
+  }
+
+  @Post('broadcast')
+  public async broadcast(
+    @Body() dto: BroadcastPushDto,
+  ): Promise<{ sentCount: number; devicesCount: number; results: Array<{ token: string; success: boolean; id?: string; error?: string }> }> {
+    const devices = this.devicesService.getAllDevices();
+    const title = dto.title || 'Job Monitor Alert';
+    const body = dto.body || 'New job opportunity detected on monitored folders!';
+    const results: Array<{ token: string; success: boolean; id?: string; error?: string }> = [];
+    let sentCount = 0;
+
+    for (const d of devices) {
+      try {
+        const res = await this.pushProvider.send({
+          recipient: d.token,
+          title,
+          body,
+          idempotencyKey: `broadcast-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+          data: {
+            applicationUrl: dto.url || 'http://localhost:3000',
+            type: 'BROADCAST_ALERT',
+          },
+        });
+        results.push({ token: d.token, success: true, id: res.providerMessageId });
+        sentCount++;
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        results.push({ token: d.token, success: false, error: msg });
+      }
+    }
+
+    return { sentCount, devicesCount: devices.length, results };
   }
 }

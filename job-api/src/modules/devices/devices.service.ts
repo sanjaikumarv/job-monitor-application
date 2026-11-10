@@ -1,5 +1,8 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
-import { DevicePlatform, DeviceRegistration } from '../../common/interfaces/device.interface.js';
+import {
+  DeviceRegistration,
+  RegisterDeviceDto,
+} from '../../common/interfaces/device.interface.js';
 import { JsonStorageService } from '../storage/json-storage.service.js';
 
 @Injectable()
@@ -24,25 +27,25 @@ export class DevicesService implements OnModuleInit {
     this.logger.log(`Loaded ${this.devices.size} device tokens into memory.`);
   }
 
-  public async register(
-    token: string,
-    deviceType: DevicePlatform = 'web',
-    userId?: string,
-  ): Promise<DeviceRegistration> {
+  public async register(dto: RegisterDeviceDto): Promise<DeviceRegistration> {
     const now = new Date().toISOString();
-    const existing = this.devices.get(token);
+    const existing = this.devices.get(dto.token);
 
     const record: DeviceRegistration = {
-      token,
-      deviceType,
-      userId: userId || existing?.userId,
+      token: dto.token,
+      deviceType: dto.deviceType || 'web',
+      deviceName: dto.deviceName || existing?.deviceName || 'Web Browser',
+      userAgent: dto.userAgent || existing?.userAgent,
+      userId: dto.userId || existing?.userId,
       registeredAt: existing?.registeredAt || now,
       lastSeenAt: now,
     };
 
-    this.devices.set(token, record);
+    this.devices.set(dto.token, record);
     await this.persist();
-    this.logger.log(`Registered device token for platform: ${deviceType}`);
+    this.logger.log(
+      `Device registered [${record.deviceType}] "${record.deviceName}": ${record.token.slice(0, 18)}...`,
+    );
     return record;
   }
 
@@ -84,4 +87,3 @@ export class DevicesService implements OnModuleInit {
     );
   }
 }
-
