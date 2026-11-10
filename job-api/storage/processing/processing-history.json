@@ -46,5 +46,21 @@
     "durationMs": 39,
     "errors": [],
     "processedAt": "2026-11-10T17:08:07.202Z"
+  },
+  {
+    "id": "proc-mwaywb7c-e8lq",
+    "folderId": "folder-mwavywzf-lzbt",
+    "folderName": "job-search-results",
+    "fileName": "jobs_2026-11-10_230021.csv",
+    "filePath": "C:\\Users\\Sanjaikumar\\Desktop\\ai-job-agent\\job-search-results\\jobs_2026-11-10_230021.csv",
+    "fileHash": "28f64ef6d1023f50582e2751029d4f523c62a64dc7126e57844e1a2ad59bbd88",
+    "eventType": "add",
+    "status": "success",
+    "recordsTotal": 1,
+    "recordsValid": 1,
+    "recordsFailed": 0,
+    "durationMs": 41,
+    "errors": [],
+    "processedAt": "2026-11-10T17:32:01.080Z"
   }
 ]

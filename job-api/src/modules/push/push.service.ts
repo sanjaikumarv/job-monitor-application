@@ -7,6 +7,15 @@ import {
 } from './notification-provider.interface.js';
 import { PushProvider } from './push-provider.service.js';
 
+export interface TestPushResult {
+  success: boolean;
+  provider: string;
+  devicesTargeted: number;
+  accepted: number;
+  failed: number;
+  results: Array<{ token: string; success: boolean; id?: string; error?: string }>;
+}
+
 @Injectable()
 export class PushService {
   private readonly logger = new Logger(PushService.name);
@@ -84,5 +93,48 @@ export class PushService {
     );
 
     return { accepted, failed, invalidTokens };
+  }
+
+  public async sendTestPush(params: {
+    token?: string;
+    title: string;
+    body: string;
+    url?: string;
+  }): Promise<TestPushResult> {
+    const tokens = params.token ? [params.token] : this.devicesService.getAllTokens();
+    const targetTokens = tokens.length > 0 ? tokens : ['mock-all-devices'];
+    const results: Array<{ token: string; success: boolean; id?: string; error?: string }> = [];
+    let accepted = 0;
+    let failed = 0;
+
+    for (const token of targetTokens) {
+      try {
+        const res = await this.pushProvider.send({
+          recipient: token,
+          title: params.title,
+          body: params.body,
+          idempotencyKey: `test-push-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+          data: {
+            applicationUrl: params.url || 'http://localhost:3000',
+            type: 'TEST_PUSH',
+          },
+        });
+        results.push({ token, success: true, id: res.providerMessageId });
+        accepted++;
+      } catch (err: unknown) {
+        failed++;
+        const msg = err instanceof Error ? err.message : String(err);
+        results.push({ token, success: false, error: msg });
+      }
+    }
+
+    return {
+      success: accepted > 0,
+      provider: process.env.PUSH_PROVIDER || 'mock',
+      devicesTargeted: targetTokens.length,
+      accepted,
+      failed,
+      results,
+    };
   }
 }

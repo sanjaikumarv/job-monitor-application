@@ -38,11 +38,13 @@ export class EmailService {
       this.config.get<string>('SMTP_PASSWORD');
 
     if (host && user && pass) {
+      const cleanPass = pass.replace(/\s+/g, '');
       this.transporter = nodemailer.createTransport({
         host,
         port,
         secure: port === 465,
-        auth: { user, pass },
+        auth: { user, pass: cleanPass },
+        tls: { rejectUnauthorized: false },
       });
       this.logger.log(`SMTP transporter configured for host: ${host}:${port}`);
     } else {

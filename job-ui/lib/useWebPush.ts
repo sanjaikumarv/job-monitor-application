@@ -1,7 +1,33 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { api } from "./api";
+import { useState, useEffect, useCallback, useRef } from "react";
+import { api, getApiBaseUrl } from "./api";
+
+const playAlertChime = () => {
+  try {
+    const AudioContextClass =
+      window.AudioContext ||
+      (window as unknown as { webkitAudioContext: typeof AudioContext })
+        .webkitAudioContext;
+    if (!AudioContextClass) return;
+    const ctx = new AudioContextClass();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+
+    osc.type = "sine";
+    osc.frequency.setValueAtTime(587.33, ctx.currentTime);
+    osc.frequency.setValueAtTime(880.0, ctx.currentTime + 0.1);
+    gain.gain.setValueAtTime(0.25, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.45);
+
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.45);
+  } catch {
+    // Ignore audio autoplay restrictions
+  }
+};
 
 export function useWebPush() {
   const [isSupported, setIsSupported] = useState(false);
@@ -9,13 +35,12 @@ export function useWebPush() {
     useState<NotificationPermission>("default");
   const [isRegistering, setIsRegistering] = useState(false);
   const [registeredToken, setRegisteredToken] = useState<string>("");
+  const swRegistrationRef = useRef<ServiceWorkerRegistration | null>(null);
 
   const getDeviceDetails = () => {
-    console.log("window---->", window);
     if (typeof window === "undefined") {
       return { deviceType: "web", deviceName: "Unknown Device", userAgent: "" };
     }
-
     const ua = navigator.userAgent;
     const isAndroid = /Android/i.test(ua);
     const isIOS = /iPhone|iPad|iPod/i.test(ua);
@@ -36,57 +61,115 @@ export function useWebPush() {
     } else if (isMac) {
       deviceName = "MacBook / Mac";
     }
-
     return { deviceType, deviceName, userAgent: ua };
   };
 
-  // Automatically register device detail on initial open
+  const showNotificationBanner = useCallback(
+    (title: string, body: string, url?: string) => {
+      playAlertChime();
+      const options: NotificationOptions = {
+        body,
+        icon: "/favicon.ico",
+        badge: "/favicon.ico",
+        tag: `jm-alert-${Date.now()}`,
+        data: { url: url || window.location.origin },
+        requireInteraction: true,
+      };
+
+      if (Notification.permission === "granted") {
+        if (
+          swRegistrationRef.current &&
+          "showNotification" in swRegistrationRef.current
+        ) {
+          swRegistrationRef.current
+            .showNotification(title, options)
+            .catch(() => {
+              try {
+                new Notification(title, options);
+              } catch {
+                // fallback
+              }
+            });
+        } else {
+          try {
+            new Notification(title, options);
+          } catch {
+            // fallback
+          }
+        }
+      }
+    },
+    [],
+  );
+
+  // Initialize service worker and SSE live stream
   useEffect(() => {
     if (typeof window === "undefined") return;
 
     const hasNotification = "Notification" in window;
     const hasSW = "serviceWorker" in navigator;
-    setIsSupported(hasNotification && hasSW);
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setIsSupported(hasNotification);
 
     if (hasNotification) {
       setPermission(Notification.permission);
     }
 
-    const autoCaptureDevice = async () => {
+    if (hasSW) {
+      navigator.serviceWorker
+        .register("/firebase-messaging-sw.js")
+        .then((reg) => {
+          swRegistrationRef.current = reg;
+        })
+        .catch(() => {});
+    }
+
+    let token = localStorage.getItem("fcm_device_token");
+    if (!token) {
+      const rand = Math.random().toString(36).substring(2, 10);
+      token = `device-${Date.now()}-${rand}`;
+      localStorage.setItem("fcm_device_token", token);
+    }
+    setRegisteredToken(token);
+
+    const { deviceType, deviceName, userAgent } = getDeviceDetails();
+    api
+      .registerDevice({
+        token,
+        deviceType,
+        deviceName:
+          Notification.permission === "granted"
+            ? `${deviceName} (Push Active)`
+            : deviceName,
+        userAgent,
+      })
+      .catch(() => {});
+
+    // Connect to Server-Sent Events stream for instant OS push alerts
+    const streamUrl = `${getApiBaseUrl()}/notifications/stream`;
+    const es = new EventSource(streamUrl);
+
+    es.onmessage = (event) => {
       try {
-        let token = localStorage.getItem("fcm_device_token");
-        if (!token) {
-          const rand = Math.random().toString(36).substring(2, 10);
-          token = `device-${Date.now()}-${rand}`;
-          localStorage.setItem("fcm_device_token", token);
-        }
-        setRegisteredToken(token);
-
-        const { deviceType, deviceName, userAgent } = getDeviceDetails();
-
-        await api.registerDevice({
-          token,
-          deviceType,
-          deviceName,
-          userAgent,
-        });
-
-        // Register service worker if available
-        if (hasSW) {
-          navigator.serviceWorker
-            .register("/firebase-messaging-sw.js")
-            .catch(() => {});
-        }
+        const data = JSON.parse(event.data);
+        showNotificationBanner(
+          data.title || "Job Notification",
+          data.body || "New job notification received",
+          data.url,
+        );
       } catch (err) {
-        console.error("Initial device capture failed:", err);
+        console.error("Failed to parse live notification event:", err);
       }
     };
 
-    autoCaptureDevice();
-  }, []);
+    return () => {
+      es.close();
+    };
+  }, [showNotificationBanner]);
 
   const requestAndRegister = async (): Promise<boolean> => {
-    if (!isSupported) return false;
+    if (typeof window === "undefined" || !("Notification" in window))
+      return false;
     setIsRegistering(true);
 
     try {
@@ -107,9 +190,14 @@ export function useWebPush() {
       await api.registerDevice({
         token,
         deviceType,
-        deviceName: `${deviceName} (Push Enabled)`,
+        deviceName: `${deviceName} (Push Active)`,
         userAgent,
       });
+
+      showNotificationBanner(
+        "🔔 Push Notifications Activated!",
+        "You will receive instant alerts for every new job detected.",
+      );
 
       setIsRegistering(false);
       return true;

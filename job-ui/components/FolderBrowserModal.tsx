@@ -48,18 +48,22 @@ export default function FolderBrowserModal({
     d.name.toLowerCase().includes(search.toLowerCase()),
   );
 
+  const quickJump = (target: string) => {
+    loadDirectories(target);
+  };
+
   return (
     <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl max-w-2xl w-full p-6 shadow-2xl flex flex-col max-h-[85vh]">
         <div className="flex justify-between items-center pb-3 border-b border-gray-100">
           <div>
             <h3 className="text-base font-bold text-gray-900">Select Directory from Local Machine</h3>
-            <p className="text-xs text-gray-500">Navigate and select any folder to monitor for CSV files</p>
+            <p className="text-xs text-gray-500">Navigate or copy/paste any folder to monitor for CSV files</p>
           </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-lg">✕</button>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-lg cursor-pointer">✕</button>
         </div>
 
-        {/* Current Path Bar & Search */}
+        {/* Current Path Bar */}
         <div className="py-3 space-y-2">
           <div className="flex items-center gap-2">
             <span className="text-xs font-semibold text-gray-500 uppercase">Path:</span>
@@ -74,27 +78,55 @@ export default function FolderBrowserModal({
             />
             <button
               onClick={() => loadDirectories(currentPath)}
-              className="text-xs font-semibold px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-md"
+              className="text-xs font-semibold px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-md cursor-pointer"
             >
               Go
             </button>
           </div>
-          <div className="flex justify-between items-center gap-2">
+
+          {/* Quick Jump Shortcuts */}
+          <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
+            <span className="text-gray-400 font-medium">Quick Jump:</span>
+            <button
+              type="button"
+              onClick={() => quickJump('Desktop')}
+              className="px-2 py-0.5 rounded bg-gray-100 hover:bg-blue-50 hover:text-blue-600 text-gray-600 font-medium cursor-pointer"
+            >
+              🖥️ Desktop
+            </button>
+            <button
+              type="button"
+              onClick={() => quickJump('C:/')}
+              className="px-2 py-0.5 rounded bg-gray-100 hover:bg-blue-50 hover:text-blue-600 text-gray-600 font-medium cursor-pointer"
+            >
+              💾 C:\ Drive
+            </button>
+            <button
+              type="button"
+              onClick={() => quickJump('.')}
+              className="px-2 py-0.5 rounded bg-gray-100 hover:bg-blue-50 hover:text-blue-600 text-gray-600 font-medium cursor-pointer"
+            >
+              📁 Current Project
+            </button>
+            {parentPath && (
+              <button
+                type="button"
+                onClick={() => loadDirectories(parentPath)}
+                className="ml-auto text-xs font-semibold text-blue-600 hover:underline flex items-center gap-0.5 cursor-pointer"
+              >
+                ↑ Up one level
+              </button>
+            )}
+          </div>
+
+          <div className="flex justify-between items-center gap-2 pt-1">
             <input
               type="text"
               placeholder="Filter directories..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="text-xs px-2.5 py-1.5 border border-gray-200 rounded-md w-48"
+              className="text-xs px-2.5 py-1.5 border border-gray-200 rounded-md w-full"
             />
-            {parentPath && (
-              <button
-                onClick={() => loadDirectories(parentPath)}
-                className="text-xs font-semibold text-blue-600 hover:underline flex items-center gap-1"
-              >
-                ↑ Up one level
-              </button>
-            )}
           </div>
         </div>
 
@@ -125,7 +157,7 @@ export default function FolderBrowserModal({
                     onSelect(d.path);
                     onClose();
                   }}
-                  className="text-[11px] font-semibold px-2 py-1 bg-white border border-gray-200 hover:bg-blue-600 hover:text-white rounded shadow-2xs opacity-0 group-hover:opacity-100 transition"
+                  className="text-[11px] font-semibold px-2 py-1 bg-white border border-gray-200 hover:bg-blue-600 hover:text-white rounded shadow-2xs opacity-0 group-hover:opacity-100 transition cursor-pointer"
                 >
                   Choose
                 </button>
@@ -140,7 +172,7 @@ export default function FolderBrowserModal({
           <div className="space-x-2">
             <button
               onClick={onClose}
-              className="px-3.5 py-1.5 text-xs font-semibold border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
+              className="px-3.5 py-1.5 text-xs font-semibold border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 cursor-pointer"
             >
               Cancel
             </button>
@@ -149,7 +181,7 @@ export default function FolderBrowserModal({
                 onSelect(currentPath);
                 onClose();
               }}
-              className="px-4 py-1.5 text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white rounded-lg shadow-sm"
+              className="px-4 py-1.5 text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white rounded-lg shadow-sm cursor-pointer"
             >
               Select Current Folder
             </button>
@@ -159,4 +191,3 @@ export default function FolderBrowserModal({
     </div>
   );
 }
-

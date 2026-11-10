@@ -1,9 +1,20 @@
-import { Body, Controller, Delete, Get, Param, Post, Inject, forwardRef } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Post,
+  Inject,
+  Optional,
+  forwardRef,
+} from '@nestjs/common';
 import type { DeviceRegistration } from '../../common/interfaces/device.interface.js';
 import { RegisterDeviceDto } from '../../common/dto/register-device.dto.js';
 import { BroadcastPushDto } from '../../common/dto/broadcast-push.dto.js';
 import { PushProvider } from '../push/push-provider.service.js';
 import { DevicesService } from './devices.service.js';
+import { NotificationsService } from '../notifications/notifications.service.js';
 
 @Controller('api/devices')
 export class DevicesController {
@@ -11,6 +22,9 @@ export class DevicesController {
     private readonly devicesService: DevicesService,
     @Inject(forwardRef(() => PushProvider))
     private readonly pushProvider: PushProvider,
+    @Optional()
+    @Inject(forwardRef(() => NotificationsService))
+    private readonly notificationsService?: NotificationsService,
   ) {}
 
   @Post('register')
@@ -32,12 +46,24 @@ export class DevicesController {
   @Post('broadcast')
   public async broadcast(
     @Body() dto: BroadcastPushDto,
-  ): Promise<{ sentCount: number; devicesCount: number; results: Array<{ token: string; success: boolean; id?: string; error?: string }> }> {
+  ): Promise<{
+    sentCount: number;
+    devicesCount: number;
+    results: Array<{ token: string; success: boolean; id?: string; error?: string }>;
+  }> {
     const devices = this.devicesService.getAllDevices();
     const title = dto.title || 'Job Monitor Alert';
     const body = dto.body || 'New job opportunity detected on monitored folders!';
     const results: Array<{ token: string; success: boolean; id?: string; error?: string }> = [];
     let sentCount = 0;
+
+    // Emit live SSE push event to connected browsers (laptop & mobile)
+    this.notificationsService?.emitLiveNotification({
+      type: 'BROADCAST_ALERT',
+      title,
+      body,
+      url: dto.url || 'http://localhost:3000',
+    });
 
     for (const d of devices) {
       try {

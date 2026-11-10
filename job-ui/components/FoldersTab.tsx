@@ -34,7 +34,6 @@ export default function FoldersTab({
     });
 
   const currentPathValue = watch("path");
-  console.log("currentPathValue", currentPathValue);
   const onSubmit = async (values: FormValues) => {
     setIsSubmitting(true);
     try {
@@ -167,7 +166,16 @@ export default function FoldersTab({
 
             <div className='relative flex rounded-lg shadow-2xs'>
               <input
-                {...register("path", { required: true })}
+                {...register("path", {
+                  required: true,
+                  onChange: (e) => {
+                    const val = e.target.value;
+                    if (val && !getValues("name")) {
+                      const baseName = val.split(/[/\\]/).filter(Boolean).pop();
+                      if (baseName) setValue("name", baseName);
+                    }
+                  },
+                })}
                 placeholder='e.g. C:/job-data or /var/jobs'
                 className='w-full px-3 py-2 text-sm border border-gray-300 rounded-l-lg focus:ring-2 focus:ring-blue-500 focus:outline-hidden font-mono text-xs pr-2'
               />

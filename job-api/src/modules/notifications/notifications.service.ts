@@ -7,6 +7,8 @@ import {
   Optional,
   forwardRef,
 } from '@nestjs/common';
+import { Subject, Observable } from 'rxjs';
+import { map } from 'rxjs/operators';
 import { JobRecord } from '../../common/interfaces/job.interface.js';
 import type { ProcessingHistoryItem } from '../../common/interfaces/processing.interface.js';
 import {
@@ -20,12 +22,21 @@ import { QUEUE_EMAIL, QUEUE_PUSH } from '../queues/queue.constants.js';
 import { JsonStorageService } from '../storage/json-storage.service.js';
 import { EmailService } from '../email/email.service.js';
 
+export interface LiveNotificationEvent {
+  type: string;
+  title: string;
+  body: string;
+  url?: string;
+  timestamp: string;
+}
+
 @Injectable()
 export class NotificationsService implements OnModuleInit {
   private readonly logger = new Logger(NotificationsService.name);
   private readonly storageCategory = 'notifications';
   private readonly storageFile = 'notification-history.json';
   private readonly tasksMap = new Map<string, NotificationTask>();
+  private readonly liveStream$ = new Subject<LiveNotificationEvent>();
 
   constructor(
     private readonly storage: JsonStorageService,
@@ -53,13 +64,8 @@ export class NotificationsService implements OnModuleInit {
     channel: NotificationChannel,
     recipient: string,
   ): Promise<NotificationTask | null> {
-    const id = `notif-${channel}-${job.jobId}`;
+    const id = `notif-${channel}-${job.jobId}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
     const now = new Date().toISOString();
-
-    const existing = this.tasksMap.get(id);
-    if (existing && existing.status === 'sent') {
-      return null;
-    }
 
     const task: NotificationTask = {
       id,
@@ -149,8 +155,7 @@ export class NotificationsService implements OnModuleInit {
 
   public async handleFileProcessed(
     historyItem: ProcessingHistoryItem,
-    newJobs: JobRecord[] = [],
-    updatedJobs: JobRecord[] = [],
+    allJobs: JobRecord[] = [],
     targetEmail = 'devsanjaikumarv@gmail.com',
   ): Promise<void> {
     if (this.emailService) {
@@ -165,11 +170,36 @@ export class NotificationsService implements OnModuleInit {
       }
     }
 
-    const jobsToNotify = [...newJobs, ...updatedJobs];
-    for (const job of jobsToNotify) {
+    // Send notification email and live push alert for EACH job in this file
+    for (const job of allJobs) {
       await this.enqueueNotification(job, 'email', targetEmail);
       await this.enqueueNotification(job, 'push', 'multicast');
+      this.emitLiveNotification({
+        type: 'JOB_ALERT',
+        title: 'New Job Alert!',
+        body: `${job.jobTitle} at ${job.companyName}`,
+        url: job.applicationUrl,
+      });
     }
+  }
+
+  public getLiveStream(): Observable<{ data: LiveNotificationEvent }> {
+    return this.liveStream$.asObservable().pipe(map((data) => ({ data })));
+  }
+
+  public emitLiveNotification(payload: {
+    type?: string;
+    title: string;
+    body: string;
+    url?: string;
+  }): void {
+    this.liveStream$.next({
+      type: payload.type || 'NOTIFICATION',
+      title: payload.title,
+      body: payload.body,
+      url: payload.url || 'http://localhost:3000',
+      timestamp: new Date().toISOString(),
+    });
   }
 
   private async persist(): Promise<void> {

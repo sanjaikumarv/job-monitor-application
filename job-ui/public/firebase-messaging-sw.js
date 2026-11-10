@@ -1,40 +1,63 @@
-// Firebase Cloud Messaging Service Worker
-self.addEventListener('push', (event) => {
-  if (!event.data) return;
+self.addEventListener("install", () => {
+  self.skipWaiting();
+});
 
-  try {
-    const payload = event.data.json();
-    const notificationTitle = payload.notification?.title || 'New Job Alert!';
-    const notificationOptions = {
-      body: payload.notification?.body || 'A new matching job opportunity was found.',
-      icon: '/next.svg',
-      badge: '/file.svg',
-      data: payload.data || {},
-    };
+self.addEventListener("activate", (event) => {
+  event.waitUntil(clients.claim());
+});
 
-    event.waitUntil(
-      self.registration.showNotification(notificationTitle, notificationOptions),
-    );
-  } catch (err) {
-    console.error('Push handling error:', err);
+self.addEventListener("push", (event) => {
+  let payload = {};
+  if (event.data) {
+    try {
+      payload = event.data.json();
+    } catch {
+      payload = {
+        notification: { title: "Notification", body: event.data.text() },
+      };
+    }
+  }
+
+  const title =
+    payload.notification?.title || payload.data?.title || "New Job Alert!";
+  const options = {
+    body:
+      payload.notification?.body ||
+      payload.data?.body ||
+      "New scheduled notification received.",
+    icon: payload.notification?.icon || "/favicon.ico",
+    badge: payload.notification?.badge || "/favicon.ico",
+    data: payload.data || {},
+    requireInteraction: true,
+  };
+
+  event.waitUntil(self.registration.showNotification(title, options));
+});
+
+self.addEventListener("message", (event) => {
+  if (event.data && event.data.type === "SHOW_NOTIFICATION") {
+    const title = event.data.title || "Job Monitor Alert";
+    const options = event.data.options || {};
+    event.waitUntil(self.registration.showNotification(title, options));
   }
 });
 
-self.addEventListener('notificationclick', (event) => {
+self.addEventListener("notificationclick", (event) => {
   event.notification.close();
-  const urlToOpen = event.notification.data?.applicationUrl || '/';
+  const targetUrl = event.notification.data?.link || event.notification.data?.url || "/";
 
   event.waitUntil(
-    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windowClients) => {
-      for (const client of windowClients) {
-        if (client.url === urlToOpen && 'focus' in client) {
-          return client.focus();
+    clients
+      .matchAll({ type: "window", includeUncontrolled: true })
+      .then((windowClients) => {
+        for (const client of windowClients) {
+          if (client.url.includes(self.location.origin) && "focus" in client) {
+            return client.focus();
+          }
         }
-      }
-      if (clients.openWindow) {
-        return clients.openWindow(urlToOpen);
-      }
-    }),
+        if (clients.openWindow) {
+          return clients.openWindow(targetUrl);
+        }
+      }),
   );
 });
-
