@@ -1,18 +1,9 @@
-import {
-  BadRequestException,
-  Injectable,
-  Logger,
-  NotFoundException,
-  OnModuleInit,
-} from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, NotFoundException, OnModuleInit } from '@nestjs/common';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
 import { CreateFolderDto } from '../../common/dto/create-folder.dto.js';
-import {
-  FolderConfig,
-  MonitoringStatus,
-} from '../../common/interfaces/folder.interface.js';
+import { FolderConfig, MonitoringStatus } from '../../common/interfaces/folder.interface.js';
 import { PathSanitizerUtil } from '../../common/utils/path-sanitizer.util.js';
 import { JsonStorageService } from '../storage/json-storage.service.js';
 import { FolderWatcherService } from './folder-watcher.service.js';
@@ -39,31 +30,53 @@ export class FoldersService implements OnModuleInit {
   private async insertPathInEnv(): Promise<void> {
     if (!this.configService) return;
     const paths = this.configService.get<string>('WATCH_FOLDER_PATH');
-    const parsed = JSON.parse(paths as string);
-    if (!parsed?.length) {
-      throw new BadRequestException('No default path found in path env');
+    if (!paths || typeof paths !== 'string' || paths.trim() === '') {
+      return;
     }
+
+    let parsed: Array<{ path: string; name?: string }>;
     try {
-      if (Array.isArray(parsed)) {
-        for (const item of parsed) {
-          if (!item?.path) continue;
-          try {
-            const folder = await this.create({
-              path: item.path,
-              name: item.name || 'Monitored Folder',
-              isActive: true,
-              recursive: true,
-            });
-            this.logger.log(`Path inserted in env ${item.path}`);
-            this.watcher.watchFolder(folder);
-          } catch (error) {
-            throw new BadRequestException(error);
-          }
-        }
+      parsed = JSON.parse(paths);
+      if (!Array.isArray(parsed)) {
+        this.logger.warn('WATCH_FOLDER_PATH is not a valid JSON array.');
+        return;
       }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       this.logger.warn(`Failed to parse WATCH_FOLDER_PATH: ${msg}`);
+      return;
+    }
+
+    for (const item of parsed) {
+      if (!item?.path) continue;
+      try {
+        const check = PathSanitizerUtil.sanitizeAndValidate(item.path);
+        if (!check.isValid) {
+          this.logger.warn(`Skipping folder path "${item.path}": ${check.error}`);
+          continue;
+        }
+
+        const existing = Array.from(this.folders.values()).find(
+          (f) => f.path.toLowerCase() === check.normalizedPath.toLowerCase(),
+        );
+
+        if (existing) {
+          if (!existing.isActive) await this.activate(existing.id);
+          this.logger.log(`Folder active: ${existing.name} (${existing.path})`);
+          continue;
+        }
+
+        const folder = await this.create({
+          path: check.normalizedPath,
+          name: item.name || 'Monitored Folder',
+          isActive: true,
+          recursive: true,
+        });
+        this.logger.log(`Auto-registered watch folder: "${folder.name}" -> ${folder.path}`);
+      } catch (error: unknown) {
+        const msg = error instanceof Error ? error.message : String(error);
+        this.logger.warn(`Could not register folder "${item.path}": ${msg}`);
+      }
     }
   }
   public async findAll(): Promise<FolderConfig[]> {

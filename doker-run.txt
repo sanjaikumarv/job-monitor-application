@@ -1,0 +1,7 @@
+ docker run -d `
+>>   --name job-monitor-agent `
+>>   -p 3001:3001 `
+>>   -e PORT=3001 `
+>>   -v "C:\Users\Sanjaikumar\Desktop\ai-job-agent\job-search-results:/external-watch-folder" `
+>>   -v "${PWD}\storage:/app/storage" `
+>>   job-monitor-agent

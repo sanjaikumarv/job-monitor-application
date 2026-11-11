@@ -42,13 +42,15 @@ COPY --from=builder /app/dist ./dist
 # Copy environment configuration
 COPY .env* ./
 
-# Create storage directories
+# Create storage and watch directories
 RUN mkdir -p \
     storage/configurations \
     storage/jobs \
     storage/processing \
     storage/notifications \
-    storage/devices
+    storage/devices \
+    /external-watch-folder \
+    /monitored-folders
 
 EXPOSE 1001
 

@@ -2,6 +2,36 @@ import * as path from 'node:path';
 import * as fs from 'node:fs';
 
 export class PathSanitizerUtil {
+  public static resolveCrossPlatformPath(inputPath: string): string {
+    const trimmed = inputPath.trim();
+    if (fs.existsSync(trimmed)) {
+      return path.normalize(path.resolve(trimmed));
+    }
+
+    // Resolve Windows host paths when running inside Linux / Docker container
+    if (process.platform !== 'win32' && /^[a-zA-Z]:[\\/]/.test(trimmed)) {
+      const parts = trimmed.split(/[\\/]/).filter(Boolean);
+      const folderName = parts[parts.length - 1];
+
+      if (fs.existsSync('/external-watch-folder')) {
+        return '/external-watch-folder';
+      }
+
+      if (folderName) {
+        const subMount = path.join('/monitored-folders', folderName);
+        if (fs.existsSync(subMount)) {
+          return subMount;
+        }
+      }
+
+      if (fs.existsSync('/monitored-folders')) {
+        return '/monitored-folders';
+      }
+    }
+
+    return path.normalize(path.resolve(trimmed));
+  }
+
   public static sanitizeAndValidate(targetPath: string): {
     isValid: boolean;
     normalizedPath: string;
@@ -24,38 +54,39 @@ export class PathSanitizerUtil {
       };
     }
 
-    const normalized = path.normalize(path.resolve(trimmed));
-
     if (trimmed.includes('..')) {
       return {
         isValid: false,
-        normalizedPath: normalized,
+        normalizedPath: path.normalize(path.resolve(trimmed)),
         error: 'Directory traversal is forbidden.',
       };
     }
+
+    const resolved = this.resolveCrossPlatformPath(trimmed);
+
     try {
-      if (!fs.existsSync(normalized)) {
+      if (!fs.existsSync(resolved)) {
         return {
           isValid: false,
-          normalizedPath: normalized,
+          normalizedPath: resolved,
           error: 'Specified folder path does not exist.',
         };
       }
 
-      const stats = fs.statSync(normalized);
+      const stats = fs.statSync(resolved);
       if (!stats.isDirectory()) {
         return {
           isValid: false,
-          normalizedPath: normalized,
+          normalizedPath: resolved,
           error: 'Specified path is not a directory.',
         };
       }
     } catch (err: unknown) {
       const message =
         err instanceof Error ? err.message : 'Filesystem access failed.';
-      return { isValid: false, normalizedPath: normalized, error: message };
+      return { isValid: false, normalizedPath: resolved, error: message };
     }
 
-    return { isValid: true, normalizedPath: normalized };
+    return { isValid: true, normalizedPath: resolved };
   }
 }
