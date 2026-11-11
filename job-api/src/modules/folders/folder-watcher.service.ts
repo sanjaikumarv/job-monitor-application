@@ -7,6 +7,7 @@ import {
   MonitoringStatus,
   WatcherEventPayload,
 } from '../../common/interfaces/folder.interface.js';
+import { PathSanitizerUtil } from '../../common/utils/path-sanitizer.util.js';
 
 type EventListener = (payload: WatcherEventPayload) => Promise<void> | void;
 
@@ -30,19 +31,19 @@ export class FolderWatcherService implements OnModuleDestroy {
   public watchFolder(folder: FolderConfig): void {
     this.unwatchFolder(folder.id);
 
+    const targetPath = PathSanitizerUtil.resolveCrossPlatformPath(folder.path);
     this.logger.log(
-      `Starting watcher for folder: "${folder.name}" (${folder.path})`,
+      `Starting watcher for folder: "${folder.name}" (${targetPath}) [polling: true]`,
     );
     this.folderStatuses.set(folder.id, 'watching');
 
-    const watcher = chokidar.watch(folder.path, {
+    const watcher = chokidar.watch(targetPath, {
       ignored: [
         /(^|[/\\])\../, // dotfiles
         /~.*$/, // temp files
         /\.tmp$/i,
         /\.crdownload$/i,
         (file: string) => {
-          // Allow directories to be traversed if recursive, otherwise filter non-csv files
           if (!file) return false;
           const ext = path.extname(file).toLowerCase();
           return ext !== '' && ext !== '.csv';
@@ -51,7 +52,10 @@ export class FolderWatcherService implements OnModuleDestroy {
       persistent: true,
       ignoreInitial: false,
       depth: folder.recursive ? undefined : 0,
-      awaitWriteFinish: false, // We use custom robust stability check
+      awaitWriteFinish: false,
+      usePolling: true,
+      interval: 1000,
+      binaryInterval: 1500,
     });
 
     watcher
@@ -108,6 +112,7 @@ export class FolderWatcherService implements OnModuleDestroy {
   ): void {
     if (path.extname(filePath).toLowerCase() !== '.csv') return;
 
+    this.logger.log(`Detected file event "${eventType}" for: ${filePath}`);
     const debounceKey = `${folderId}:${filePath}`;
     const existingTimer = this.debounceTimers.get(debounceKey);
     if (existingTimer) {
@@ -118,6 +123,7 @@ export class FolderWatcherService implements OnModuleDestroy {
       this.debounceTimers.delete(debounceKey);
       const isReady = await this.verifyFileStability(filePath);
       if (isReady) {
+        this.logger.log(`File stabilized and ready: ${filePath}`);
         await this.emitEvent(folderId, eventType, filePath);
       } else {
         this.logger.warn(`File ${filePath} could not be stabilized or read.`);
@@ -129,15 +135,14 @@ export class FolderWatcherService implements OnModuleDestroy {
 
   private async verifyFileStability(
     filePath: string,
-    maxAttempts = 6,
+    maxAttempts = 10,
   ): Promise<boolean> {
     let previousSize = -1;
     for (let i = 0; i < maxAttempts; i++) {
       try {
         if (!fs.existsSync(filePath)) return false;
         const stats = await fs.promises.stat(filePath);
-        if (stats.size === previousSize && stats.size > 0) {
-          // Attempt to open readable handle to verify no OS locks
+        if (stats.size === previousSize && stats.size >= 0) {
           const fd = await fs.promises.open(filePath, 'r');
           await fd.close();
           return true;

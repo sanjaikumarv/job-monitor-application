@@ -227,6 +227,7 @@ export class FoldersService implements OnModuleInit {
     );
     this.folders.clear();
     for (const item of raw) {
+      item.path = PathSanitizerUtil.resolveCrossPlatformPath(item.path);
       this.folders.set(item.id, item);
       if (item.isActive) {
         try {
