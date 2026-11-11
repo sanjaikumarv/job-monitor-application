@@ -9,10 +9,14 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
 import { CreateFolderDto } from '../../common/dto/create-folder.dto.js';
-import { FolderConfig, MonitoringStatus } from '../../common/interfaces/folder.interface.js';
+import {
+  FolderConfig,
+  MonitoringStatus,
+} from '../../common/interfaces/folder.interface.js';
 import { PathSanitizerUtil } from '../../common/utils/path-sanitizer.util.js';
 import { JsonStorageService } from '../storage/json-storage.service.js';
 import { FolderWatcherService } from './folder-watcher.service.js';
+import { ConfigService } from '@nestjs/config';
 
 @Injectable()
 export class FoldersService implements OnModuleInit {
@@ -24,12 +28,44 @@ export class FoldersService implements OnModuleInit {
   constructor(
     private readonly storage: JsonStorageService,
     private readonly watcher: FolderWatcherService,
+    private readonly configService?: ConfigService,
   ) {}
 
   public async onModuleInit(): Promise<void> {
     await this.loadAndRestore();
+    await this.insertPathInEnv();
   }
 
+  private async insertPathInEnv(): Promise<void> {
+    if (!this.configService) return;
+    const paths = this.configService.get<string>('WATCH_FOLDER_PATH');
+    const parsed = JSON.parse(paths as string);
+    if (!parsed?.length) {
+      throw new BadRequestException('No default path found in path env');
+    }
+    try {
+      if (Array.isArray(parsed)) {
+        for (const item of parsed) {
+          if (!item?.path) continue;
+          try {
+            const folder = await this.create({
+              path: item.path,
+              name: item.name || 'Monitored Folder',
+              isActive: true,
+              recursive: true,
+            });
+            this.logger.log(`Path inserted in env ${item.path}`);
+            this.watcher.watchFolder(folder);
+          } catch (error) {
+            throw new BadRequestException(error);
+          }
+        }
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.warn(`Failed to parse WATCH_FOLDER_PATH: ${msg}`);
+    }
+  }
   public async findAll(): Promise<FolderConfig[]> {
     return Array.from(this.folders.values()).map((f) => ({
       ...f,
@@ -57,7 +93,9 @@ export class FoldersService implements OnModuleInit {
     // Check duplicate path
     for (const existing of this.folders.values()) {
       if (existing.path.toLowerCase() === check.normalizedPath.toLowerCase()) {
-        throw new BadRequestException('A folder with this path is already registered.');
+        throw new BadRequestException(
+          'A folder with this path is already registered.',
+        );
       }
     }
 
@@ -130,18 +168,28 @@ export class FoldersService implements OnModuleInit {
     parentPath?: string;
     directories: Array<{ name: string; path: string }>;
   }> {
-    let resolved = targetPath ? path.normalize(path.resolve(targetPath)) : os.homedir();
+    let resolved = targetPath
+      ? path.normalize(path.resolve(targetPath))
+      : os.homedir();
     if (!fs.existsSync(resolved)) {
       resolved = process.cwd();
     }
 
-    const parent = path.dirname(resolved) !== resolved ? path.dirname(resolved) : undefined;
+    const parent =
+      path.dirname(resolved) !== resolved ? path.dirname(resolved) : undefined;
     let directories: Array<{ name: string; path: string }> = [];
 
     try {
-      const entries = await fs.promises.readdir(resolved, { withFileTypes: true });
+      const entries = await fs.promises.readdir(resolved, {
+        withFileTypes: true,
+      });
       directories = entries
-        .filter((e) => e.isDirectory() && !e.name.startsWith('$') && !e.name.startsWith('.'))
+        .filter(
+          (e) =>
+            e.isDirectory() &&
+            !e.name.startsWith('$') &&
+            !e.name.startsWith('.'),
+        )
         .map((e) => ({
           name: e.name,
           path: path.join(resolved, e.name),
@@ -184,4 +232,3 @@ export class FoldersService implements OnModuleInit {
     await this.storage.write(this.storageCategory, this.storageFile, list);
   }
 }
-

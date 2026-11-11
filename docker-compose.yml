@@ -7,10 +7,15 @@ services:
     volumes:
       - redis-data:/data
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
 
   job-api:
     build:
-      context: .
+      context: ./job-api
       dockerfile: Dockerfile
     container_name: job-monitor-api
     ports:
@@ -20,23 +25,34 @@ services:
       - NODE_ENV=production
       - REDIS_HOST=redis
       - REDIS_PORT=6379
-      - NOTIFICATION_EMAIL=admin@example.com
+      - NOTIFICATION_EMAIL=${NOTIFICATION_EMAIL:-devsanjaikumarv@gmail.com}
+      - SMTP_HOST=${SMTP_HOST:-smtp.gmail.com}
+      - SMTP_PORT=${SMTP_PORT:-587}
+      - SMTP_USER=${SMTP_USER:-devsanjaikumarv@gmail.com}
+      - SMTP_PASS=${SMTP_PASS:-vsvwqrhhbmdwlzfv}
+      - SMTP_FROM=${SMTP_FROM:-devsanjaikumarv@gmail.com}
+      - PUSH_PROVIDER=${PUSH_PROVIDER:-mock}
+      - FCM_PROJECT_ID=${FCM_PROJECT_ID:-push-notification-servic-ddb26}
+      - FRONTEND_URL=${FRONTEND_URL:-http://localhost:3000}
     volumes:
-      - ./storage:/app/storage
+      - ./job-api/storage:/app/storage
       - ./monitored-folders:/monitored-folders
     depends_on:
-      - redis
+      redis:
+        condition: service_healthy
     restart: unless-stopped
 
   job-ui:
     build:
-      context: .
-      dockerfile: Dockerfile.ui
+      context: ./job-ui
+      dockerfile: Dockerfile
     container_name: job-monitor-ui
     ports:
       - "3000:3000"
     environment:
-      - NEXT_PUBLIC_API_URL=http://localhost:3001/api
+      - PORT=3000
+      - NODE_ENV=production
+      - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://localhost:3001/api}
     depends_on:
       - job-api
     restart: unless-stopped

@@ -1,10 +1,10 @@
 FROM node:24-alpine AS builder
 
 WORKDIR /app
-COPY job-ui/package.json job-ui/pnpm-lock.yaml* ./
-RUN npm install -g pnpm && pnpm install --frozen-lockfile || pnpm install
+COPY package.json pnpm-lock.yaml* ./
+RUN npm install -g pnpm && pnpm install --frozen-lockfile --ignore-scripts --config.strict-dep-builds=false || pnpm install --ignore-scripts
 
-COPY job-ui/ ./
+COPY . .
 RUN pnpm build
 
 FROM node:24-alpine AS runner
@@ -19,4 +19,3 @@ COPY --from=builder /app/public ./public
 
 EXPOSE 3000
 CMD ["npm", "run", "start"]
-

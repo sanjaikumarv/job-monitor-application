@@ -1,24 +1,55 @@
-FROM node:24-alpine AS builder
+
+# Stage 1: Install dependencies
+FROM node:22-alpine AS dependencies
 
 WORKDIR /app
-COPY job-api/package.json job-api/pnpm-lock.yaml* ./
-RUN npm install -g pnpm && pnpm install --frozen-lockfile || pnpm install
 
-COPY job-api/ ./
+RUN corepack enable
+
+COPY package.json pnpm-lock.yaml* pnpm-workspace.yaml* ./
+
+RUN pnpm install --frozen-lockfile --ignore-scripts --config.strict-dep-builds=false
+
+# Stage 2: Build NestJS application
+FROM node:22-alpine AS builder
+
+WORKDIR /app
+
+RUN corepack enable
+
+COPY --from=dependencies /app/node_modules ./node_modules
+COPY . .
+
 RUN pnpm build
 
-FROM node:24-alpine AS runner
+# Stage 3: Production
+FROM node:22-alpine AS production
+
 WORKDIR /app
+
 ENV NODE_ENV=production
 ENV PORT=3001
 
-COPY --from=builder /app/package.json ./
-COPY --from=builder /app/node_modules ./node_modules
+RUN corepack enable
+
+COPY package.json pnpm-lock.yaml* pnpm-workspace.yaml* ./
+
+RUN pnpm install --prod --frozen-lockfile --ignore-scripts --config.strict-dep-builds=false
+
+# Copy compiled NestJS application
 COPY --from=builder /app/dist ./dist
 
-# Create storage directory structure
-RUN mkdir -p storage/configurations storage/jobs storage/processing storage/notifications storage/devices
+# Copy environment configuration
+COPY .env* ./
 
-EXPOSE 3001
-CMD ["node", "dist/src/main.js"]
+# Create storage directories
+RUN mkdir -p \
+    storage/configurations \
+    storage/jobs \
+    storage/processing \
+    storage/notifications \
+    storage/devices
 
+EXPOSE 1001
+
+CMD ["node", "dist/main.js"]

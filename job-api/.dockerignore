@@ -1,0 +1,8 @@
+node_modules
+dist
+storage
+*.log
+.git
+.gitignore
+.npmrc
+
